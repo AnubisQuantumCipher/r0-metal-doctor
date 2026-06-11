@@ -20,3 +20,4 @@ Started: 2026-06-11 · Context: risc0/risc0#3753, dossier 02 of the build-studio
 **Next**
 - Operator: install toolchain, run stage-2 validation, capture the report
 - Then: publish repo (git push — operator action), and the #3753 comment in the launch kit's dossier 02 can cite a real observed-lane report instead of a design
+- Note: README's clone URL and Cargo.toml's `repository` field point at github.com/AnubisQuantumCipher/r0-metal-doctor, which 404s until the push happens — they describe the published state on purpose

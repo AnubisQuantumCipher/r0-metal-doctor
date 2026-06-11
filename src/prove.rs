@@ -84,7 +84,10 @@ pub fn observe(project: &str, extra_args: Option<&str>) -> Result<ProveReport> {
         .env("RUST_LOG", &rust_log)
         .env("RISC0_DEV_MODE", &dev_mode);
 
-    let shown = format!("cargo run --release{}", extra_args.map(|a| format!(" -- {a}")).unwrap_or_default());
+    let shown = format!(
+        "cargo run --release{}",
+        extra_args.map(|a| format!(" -- {a}")).unwrap_or_default()
+    );
     let started = Instant::now();
     let out = cmd
         .output()
@@ -138,8 +141,7 @@ mod tests {
 
     #[test]
     fn mixed_lanes_are_reported_as_mixed() {
-        let (v, m) =
-            scan_lanes("INFO prover: metal enabled\nWARN prover: cpu fallback engaged\n");
+        let (v, m) = scan_lanes("INFO prover: metal enabled\nWARN prover: cpu fallback engaged\n");
         assert!(v.starts_with("mixed"));
         assert_eq!(m.len(), 2);
     }

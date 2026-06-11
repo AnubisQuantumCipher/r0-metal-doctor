@@ -30,7 +30,9 @@ pub fn probe() -> DeviceReport {
             max_threads_per_threadgroup: None,
             apple_gpu_family: None,
             registry_id: None,
-            note: Some("no system default Metal device — GPU proving is impossible on this host".into()),
+            note: Some(
+                "no system default Metal device — GPU proving is impossible on this host".into(),
+            ),
         };
     };
 
