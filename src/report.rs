@@ -78,9 +78,50 @@ pub fn emit_doctor(doctor: &Doctor, notes: &[String], json: bool) -> anyhow::Res
             })?
         );
     } else {
-        println!("{:#?}", doctor.device);
-        println!("{:#?}", doctor.env);
-        println!("\nnotes:");
+        let d = &doctor.device;
+        println!("metal device");
+        if d.metal_available {
+            println!(
+                "  name                {}",
+                d.device_name.as_deref().unwrap_or("?")
+            );
+            println!(
+                "  unified memory      {}",
+                d.unified_memory.map_or("?".into(), |b| b.to_string())
+            );
+            if let Some(b) = d.recommended_max_working_set_bytes {
+                println!("  working set (rec.)  {:.1} GB", b as f64 / 1e9);
+            }
+            if let Some(b) = d.max_buffer_length_bytes {
+                println!("  max buffer          {:.1} GB", b as f64 / 1e9);
+            }
+            if let Some(f) = &d.apple_gpu_family {
+                println!("  gpu family          {f}");
+            }
+        } else {
+            println!("  none — {}", d.note.as_deref().unwrap_or("not available"));
+        }
+
+        let e = &doctor.env;
+        println!("\nhost environment ({} / {})", e.os, e.arch);
+        for (label, val) in [
+            ("rustc", &e.rustc),
+            ("cargo", &e.cargo),
+            ("rzup", &e.rzup),
+            ("cargo-risczero", &e.cargo_risczero),
+            ("r0vm", &e.r0vm),
+        ] {
+            println!("  {label:<18}{}", val.as_deref().unwrap_or("not found"));
+        }
+        for (label, val) in [
+            ("RISC0_DEV_MODE", &e.risc0_dev_mode),
+            ("RISC0_PROVER", &e.risc0_prover),
+            ("RUST_LOG", &e.rust_log),
+        ] {
+            println!("  {label:<18}{}", val.as_deref().unwrap_or("unset"));
+        }
+
+        println!("\nnotes");
         for n in notes {
             println!("  - {n}");
         }

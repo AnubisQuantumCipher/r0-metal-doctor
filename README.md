@@ -64,7 +64,7 @@ Requires macOS for the Metal probe (other platforms get an honest "Metal does no
 ## Status
 
 - `device`, `env`, `doctor`: working, tested (8 unit tests), validated on Apple M4 Max.
-- `prove`: implemented and unit-tested against synthetic logs; not yet validated against a live risc0 v3.0.5 run. If risc0's log strings don't surface lane selection at `info`, use `RUST_LOG=debug` — and if the verdict is still `indeterminate`, that itself is finding-grade information for #3753 (a prover that won't say which lane it used).
+- `prove`: **validated against live risc0 v3.0.5 proof runs** (2026-06-11, M4 Max). At `RUST_LOG=info` the verdict is `indeterminate` — risc0 v3.0.5 emits no lane-selection lines at info level. At `RUST_LOG=debug` the verdict is **`cpu-observed`**: all captured HAL operations log from `risc0_zkp::hal::cpu` and `risc0_circuit_rv32im::prove::hal::cpu`, on a host whose Metal device is fully present. Raw reports in [evidence/](evidence/), full writeup with static crate-manifest evidence in [FINDINGS.md](FINDINGS.md).
 
 ## License
 

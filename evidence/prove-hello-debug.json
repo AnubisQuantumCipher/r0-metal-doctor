@@ -1,0 +1,18 @@
+{
+  "project": "/tmp/r0probe-hello",
+  "command": "cargo run --release",
+  "rust_log": "debug",
+  "risc0_dev_mode": "0",
+  "exit_code": 0,
+  "wall_seconds": 33.170818583,
+  "verdict": "cpu-observed",
+  "matched_lines": [
+    "\u001b[2m2026-06-11T16:24:30.128147Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mrisc0_circuit_rv32im::prove::hal::cpu\u001b[0m\u001b[2m:\u001b[0m witgen: 32768",
+    "\u001b[2m2026-06-11T16:24:30.503390Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mrisc0_circuit_rv32im::prove::hal::cpu\u001b[0m\u001b[2m:\u001b[0m accumulate: 32768",
+    "\u001b[2m2026-06-11T16:24:31.383063Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mrisc0_zkp::hal::cpu\u001b[0m\u001b[2m:\u001b[0m output: 163840, input: 3375104, combos: 103, input_size: 103, count: 32768",
+    "\u001b[2m2026-06-11T16:24:31.389977Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mrisc0_zkp::hal::cpu\u001b[0m\u001b[2m:\u001b[0m output: 163840, input: 32768, combos: 1, input_size: 1, count: 32768",
+    "\u001b[2m2026-06-11T16:24:31.390076Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mrisc0_zkp::hal::cpu\u001b[0m\u001b[2m:\u001b[0m output: 163840, input: 6914048, combos: 211, input_size: 211, count: 32768",
+    "\u001b[2m2026-06-11T16:24:31.398241Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mrisc0_zkp::hal::cpu\u001b[0m\u001b[2m:\u001b[0m output: 163840, input: 524288, combos: 16, input_size: 16, count: 32768"
+  ],
+  "note": "verdict derives only from the matched_lines above; if it says indeterminate, no claim is made"
+}
