@@ -64,7 +64,7 @@ Requires macOS for the Metal probe (other platforms get an honest "Metal does no
 ## Status
 
 - `device`, `env`, `doctor`: working, tested (8 unit tests), validated on Apple M4 Max.
-- `prove`: **validated against live risc0 v3.0.5 proof runs** (2026-06-11, M4 Max). At `RUST_LOG=info` the verdict is `indeterminate` — risc0 v3.0.5 emits no lane-selection lines at info level. At `RUST_LOG=debug` the verdict is **`cpu-observed`**: all captured HAL operations log from `risc0_zkp::hal::cpu` and `risc0_circuit_rv32im::prove::hal::cpu`, on a host whose Metal device is fully present. Raw reports in [evidence/](evidence/), full writeup with static crate-manifest evidence in [FINDINGS.md](FINDINGS.md).
+- `prove`: **validated against live risc0 v3.0.5 proof runs** (2026-06-11, M4 Max), in both default and `metal`-feature configurations. Both verdict **`cpu-observed`** at `RUST_LOG=debug`; at `info` the verdict is `indeterminate` because risc0 emits no lane-selection lines at that level. Combined finding: on v3.0.5, Apple Silicon GPU proving is unreachable in every configuration — the shipped r0vm binary contains no Metal HAL, the `metal` cargo feature forwards nowhere (unlike `cuda`), and the rv32im 4.0.4 circuit has no Metal lane at all. Raw reports in [evidence/](evidence/), full writeup with exact citations in [FINDINGS.md](FINDINGS.md).
 
 ## License
 

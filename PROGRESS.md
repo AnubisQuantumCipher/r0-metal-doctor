@@ -39,3 +39,16 @@ Started: 2026-06-11 · Context: risc0/risc0#3753, dossier 02 of the build-studio
 
 **Next**
 - Operator: push the repo, then the #3753 comment (launch kit dossier 02) ships with tool + evidence + findings attached
+
+## 2026-06-11 — Day 1, night: the opt-in path tested, found dead
+
+**Shipped**
+- Operator asked for actual GPU proving. Tested the only remaining path: rebuilt the hello host with `risc0-zkvm features = ["metal"]`. Compiles (2m01s), runs, still **`cpu-observed`** — identical CPU-HAL lines (`evidence/prove-hello-metal-feature-debug.json`)
+- Binary forensics, host: zero `hal::metal` strings, three `hal::cpu` strings — the feature compiled no Metal code
+- Binary forensics, r0vm 3.0.5 prebuilt (97.9 MB): links Metal.framework but embeds zero `hal::metal` strings and `risc0/zkp/src/hal/cpu.rs` source paths — the default prover server is CPU-only by construction
+- Manifest root cause in FINDINGS.md Part 2: risc0-zkvm `cuda` forwards to six subcrates, `metal = ["prove"]` forwards to none; risc0-circuit-rv32im 4.0.4 has NO metal feature — the circuit has CPU and CUDA lanes only; risc0-zkp's MetalHal is orphaned
+- Conclusion upgraded: GPU proving on risc0 v3.0.5 / Apple Silicon is not "off by default" — it is unreachable in every configuration
+
+**Next**
+- Operator: push the repo; the #3753 comment now carries a complete impossibility proof, not just a default-behavior observation
+- The constructive follow-on (and the commercial one): restoring a Metal lane to the rv32im 4.x circuit is real engineering work in exactly the operator's specialty (verified Metal proving kernels). That conversation belongs off-thread, after the finding lands
