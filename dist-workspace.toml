@@ -1,0 +1,15 @@
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell"]
+# Target platforms to build apps for. Scoped to Apple Silicon + Intel macOS —
+# this is a Metal/Apple-Silicon diagnostic; other platforms get an honest
+# "Metal does not exist here" report and can be added on demand.
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]

@@ -6,7 +6,8 @@ CPU-only view of [Midnight](https://midnight.network). It only ever names a
 compute lane it watched run — it never asserts one from configuration.
 
 [![ci](https://github.com/AnubisQuantumCipher/r0-metal-doctor/actions/workflows/ci.yml/badge.svg)](https://github.com/AnubisQuantumCipher/r0-metal-doctor/actions/workflows/ci.yml)
-&nbsp;License: MIT
+[![crates.io](https://img.shields.io/crates/v/r0-metal-doctor.svg)](https://crates.io/crates/r0-metal-doctor)
+&nbsp;License: MIT &nbsp;·&nbsp; MSRV 1.85
 
 Companion to **[risc0-metal-hybrid](https://github.com/AnubisQuantumCipher/risc0-metal-hybrid)**,
 which restores a real Metal proving lane to risc0 on Apple Silicon. This tool is

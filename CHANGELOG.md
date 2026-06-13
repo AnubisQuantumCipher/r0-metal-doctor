@@ -35,6 +35,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   toolchain skew).
 - `deny.toml` + a CI supply-chain gate (cargo-deny), CI on Apple Silicon plus a
   non-macOS stub build, and `SECURITY.md`.
+- Release automation via cargo-dist 0.32 (a `v*` tag builds the shell installer,
+  both macOS `.tar.xz` archives, and `.sha256` checksums), Dependabot (cargo +
+  GitHub Actions), end-to-end CLI integration tests (`tests/cli.rs`), and a
+  crates.io README badge.
 
 ### Changed
 - Default `prove` log level is now `debug` (risc0 emits no lane lines at `info`,
