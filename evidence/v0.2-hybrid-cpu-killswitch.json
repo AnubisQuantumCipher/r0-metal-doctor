@@ -1,0 +1,34 @@
+{
+  "target": "risc0",
+  "project": "~/Desktop/metal-hybrid-prover/e2e",
+  "command": "cargo run --release",
+  "rust_log": "debug",
+  "risc0_dev_mode": "0",
+  "r0vm_version": "risc0-r0vm 3.0.5",
+  "cargo_risczero_version": "cargo-risczero 3.0.5",
+  "risc0_matrix": {
+    "detected_version": "3.0.5",
+    "finding": "risc0 3.0.x: rv32im has no reachable Metal branch; proving runs on CPU on Apple Silicon (firsthand-established for 3.0.5/3.0.4/4.0.4).",
+    "in_tested_matrix": true
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "timeout_secs": 1200,
+  "wall_seconds": 49.411931416,
+  "verdict": "cpu-observed",
+  "observed_lane": "cpu",
+  "lane_counts": {
+    "metal": 0,
+    "cuda": 0,
+    "cpu": 6
+  },
+  "matched_lines": [
+    "2026-06-13T21:46:01.395398Z DEBUG risc0_circuit_rv32im::prove::hal::cpu: witgen: 32768",
+    "2026-06-13T21:46:01.810014Z DEBUG risc0_circuit_rv32im::prove::hal::cpu: accumulate: 32768",
+    "2026-06-13T21:46:02.748025Z DEBUG risc0_zkp::hal::cpu: output: 163840, input: 3375104, combos: 103, input_size: 103, count: 32768",
+    "2026-06-13T21:46:02.754995Z DEBUG risc0_zkp::hal::cpu: output: 163840, input: 32768, combos: 1, input_size: 1, count: 32768",
+    "2026-06-13T21:46:02.755092Z DEBUG risc0_zkp::hal::cpu: output: 163840, input: 6914048, combos: 211, input_size: 211, count: 32768",
+    "2026-06-13T21:46:02.763538Z DEBUG risc0_zkp::hal::cpu: output: 163840, input: 524288, combos: 16, input_size: 16, count: 32768"
+  ],
+  "note": "verdict derives only from the matched_lines above; if it says indeterminate, no claim is made"
+}

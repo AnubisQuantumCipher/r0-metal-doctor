@@ -46,7 +46,13 @@ The obvious rebuttal to Part 1 is "so enable the feature." That was tested. It d
 
 **The default path is equally closed.** The prebuilt `r0vm` 3.0.5 binary for aarch64-apple-darwin (97.9 MB, shipped by rzup) was inspected directly: it embeds `risc0_zkp::hal::cpu` module strings with source paths (`risc0/zkp/src/hal/cpu.rs`), and zero `hal::metal` strings. It links Metal.framework, but no Metal HAL was compiled in. Since the default-features host delegates proving to r0vm, the out-of-box path executes on a prover binary that physically lacks GPU code.
 
-**Combined conclusion:** on risc0 v3.0.5 / rv32im circuit 4.0.4, Apple Silicon GPU proving is not "off by default" — it is unreachable in every configuration: the default prover binary lacks the code, the opt-in feature is disconnected, and the circuit crate has no Metal lane to connect it to. This is consistent with, and stronger than, the docs complaint in #3753.
+**Combined conclusion:** on risc0 v3.0.5 / risc0-zkp 3.0.4 / rv32im circuit 4.0.4, Apple Silicon GPU proving is not "off by default" — it is unreachable in every configuration *of this version trio*: the default prover binary lacks the code, the opt-in feature is disconnected, and the circuit crate has no Metal lane to connect it to. This is consistent with, and stronger than, the docs complaint in #3753.
+
+**This is a version-bound finding, not a timeless claim about risc0 and Metal.** Two sentinels will eventually falsify it, and the tool is built to notice:
+- Upstream [PR #3688](https://github.com/risc0/risc0/pull/3688) ("Enable metal support") merged to `main` on 2026-01-30, after v3.0.5. It adds a real Metal lane for rv32im (and recursion). It is in **no tagged release** as of 2026-06-13 — but a future release that ships it makes "unreachable" false.
+- risc0 5.0.0-rc.1 (prerelease) is a different ("m3") architecture in which rv32im moved to a C++ sys HAL. The file-and-line evidence below is valid **only** for the 3.0.x / 4.0.x line and must be re-verified by observation against 5.x.
+
+The doctor encodes this matrix (`src/versions.rs`): it classifies the observed `r0vm` version and emits `indeterminate` for anything outside the tested trio rather than repeating this finding for a version it has not checked.
 
 ## Scope — what this does and does not establish
 

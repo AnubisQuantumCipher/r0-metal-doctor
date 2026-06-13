@@ -52,3 +52,50 @@ Started: 2026-06-11 · Context: risc0/risc0#3753, dossier 02 of the build-studio
 **Next**
 - Operator: push the repo; the #3753 comment now carries a complete impossibility proof, not just a default-behavior observation
 - The constructive follow-on (and the commercial one): restoring a Metal lane to the rv32im 4.x circuit is real engineering work in exactly the operator's specialty (verified Metal proving kernels). That conversation belongs off-thread, after the finding lands
+
+## 2026-06-13 — v0.2.0 hardening (industry-ready pass)
+
+Research-driven hardening to bring the doctor to the same bar as the
+risc0-metal-hybrid sibling, plus an honest dual-target (risc0 + Midnight) build.
+
+**Shipped**
+- **Dual-target registry** (`src/target.rs`, `targets` cmd): risc0 (validated
+  Metal/CPU observer) + Midnight (CPU-only — Metal `NotApplicable`). Honesty is
+  structural: the data model cannot render a Midnight Metal "✓".
+- **`midnight` observer** (`src/midnight.rs`): compactc detection, proof-server
+  reachability (TCP + `/health`), docker identity, env routing, stated CPU-only
+  finding. Grounded in the Midnight feasibility research (Plonk+KZG/BLS12-381,
+  Linux-container, no Metal). No assumed `-v` log schema.
+- **CI-gating**: verdict-keyed exit codes (0/1/2/3) + `prove --expect <lane>`.
+- **Robust `prove`**: live-streamed subprocess, `--timeout-secs` (fail closed to
+  indeterminate), ANSI strip, redaction-by-default. Default RUST_LOG=debug.
+- **Bug caught + fixed by reproduce-before-certify**: a failed build whose error
+  points at `risc0-zkp/src/hal/metal.rs` was being read as `metal-observed`. Now
+  (a) build/compiler-diagnostic lines are ignored by the scanner, and (b) a
+  non-zero exit claims no lane. Regression tests in `src/lane.rs`.
+- **Dominant-lane verdict** (`src/lane.rs`): a hybrid run reports its dominant
+  lane instead of an uninformative "mixed".
+- **Version matrix** (`src/versions.rs`): the "unreachable" finding is now bound
+  to the 3.0.5/3.0.4/4.0.4 trio with PR #3688 / 5.0.0-rc.1 sentinels; untested
+  versions → indeterminate.
+- **`check`** (paste-ready one-liner), **`bundle`** (redacted evidence dir),
+  human formatters for device/env/prove, typed env checks with remediation,
+  shell `completions` + `man`.
+- **Infra/docs**: CI on Apple Silicon + non-macOS stub + cargo-deny; `deny.toml`
+  (validated: only RUSTSEC-2024-0436/paste ignored — NOT `block`, which is a
+  rustc lint); SECURITY.md; CHANGELOG.md; CONTRIBUTING.md; issue template;
+  release.md (cargo-dist process, operator-run); MSRV 1.85 (verified). README +
+  FINDINGS rewritten for version-scoped honesty; `evidence/README.md` resolves
+  the stock-CPU-vs-hybrid-Metal evidence contradiction; evidence redacted +
+  ANSI-stripped; fresh v0.2-schema metal/cpu samples.
+- 26 tests, clippy `-D warnings` clean, `cargo deny` green.
+
+**Validated firsthand**
+- `prove` vs the hybrid → `metal-observed` (31 lines, exit 0, redacted, ANSI-clean).
+- `prove` vs forced-CPU hybrid → `cpu-observed` (7 lines).
+- `prove` vs a broken project → `indeterminate` (no false lane).
+- `midnight` → CPU-only, compactc 0.30.0, 6300 unconfigured.
+
+**Next (operator actions)**
+- Review the branch `harden/industry-ready`, then merge/push.
+- `dist init` + tag to cut the first release; `cargo publish`; optional Homebrew tap.

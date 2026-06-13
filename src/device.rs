@@ -2,7 +2,7 @@ use serde::Serialize;
 
 /// What the Metal device probe observed. Every field is read from the live
 /// device; nothing is inferred from the model name.
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct DeviceReport {
     pub metal_available: bool,
     pub device_name: Option<String>,
