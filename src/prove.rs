@@ -1,67 +1,128 @@
+//! Observe a real risc0 proof run and report the prover lane the logs show.
+//!
+//! The run is streamed live (so a multi-minute proof shows progress instead of
+//! looking hung) under a wall-clock timeout (so a stuck target can never hang
+//! the doctor). The verdict is derived only from the lane lines actually
+//! captured — see [`crate::lane`] — and on timeout it fails closed to
+//! `indeterminate` rather than guessing.
+
+use crate::lane::{self, Lane, LaneCounts};
+use crate::sanitize::redact;
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
-use std::process::Command;
-use std::time::Instant;
+use std::process::{Command, ExitCode, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+use wait_timeout::ChildExt;
 
-/// Outcome of observing one real proof run. The verdict is derived only from
-/// log lines actually captured during this run; the matched lines are included
-/// verbatim so the reader can check the derivation.
+/// Options controlling how a proof run is observed.
+pub struct ProveOpts {
+    /// `RUST_LOG` value for the child. Defaults to `debug` — risc0 emits no
+    /// lane-selection lines at `info`, so `info` would always be indeterminate.
+    pub rust_log: String,
+    /// Wall-clock budget. On expiry the child is killed and the verdict fails
+    /// closed to indeterminate.
+    pub timeout_secs: u64,
+    /// Collapse host-identifying paths/username in the stored report so it is
+    /// safe to paste into a public bug report.
+    pub redact: bool,
+}
+
+impl Default for ProveOpts {
+    fn default() -> Self {
+        ProveOpts {
+            rust_log: "debug".to_string(),
+            timeout_secs: 600,
+            redact: true,
+        }
+    }
+}
+
+/// Outcome of observing one real proof run. The verdict derives only from the
+/// matched lines (included verbatim, ANSI-stripped) so a reader can check it.
 #[derive(Serialize, Debug)]
 pub struct ProveReport {
+    pub target: &'static str,
     pub project: String,
     pub command: String,
     pub rust_log: String,
     pub risc0_dev_mode: String,
+    pub r0vm_version: Option<String>,
+    pub cargo_risczero_version: Option<String>,
+    pub risc0_matrix: crate::versions::Classification,
     pub exit_code: Option<i32>,
+    pub timed_out: bool,
+    pub timeout_secs: u64,
     pub wall_seconds: f64,
     pub verdict: String,
+    pub observed_lane: Option<Lane>,
+    pub lane_counts: LaneCounts,
     pub matched_lines: Vec<String>,
     pub note: String,
 }
 
-/// Scan captured output for prover-lane evidence. A line counts only if it
-/// mentions a lane keyword AND a proving-context keyword, to avoid matching
-/// e.g. a crate name in the build output.
-pub fn scan_lanes(output: &str) -> (String, Vec<String>) {
-    const CONTEXT: [&str; 5] = ["prover", "prove", "proving", "hal", "receipt"];
-    let mut metal = Vec::new();
-    let mut cuda = Vec::new();
-    let mut cpu = Vec::new();
-
-    for line in output.lines() {
-        let l = line.to_ascii_lowercase();
-        if !CONTEXT.iter().any(|c| l.contains(c)) {
-            continue;
+impl ProveReport {
+    /// Compact verdict for one-line summaries (`metal-observed`, `mixed→metal`,
+    /// `cpu-observed`, `indeterminate`).
+    pub fn verdict_short(&self) -> String {
+        if self.timed_out {
+            return "indeterminate(timeout)".to_string();
         }
-        if l.contains("metal") {
-            metal.push(line.trim().to_string());
-        } else if l.contains("cuda") {
-            cuda.push(line.trim().to_string());
-        } else if l.contains("cpu") {
-            cpu.push(line.trim().to_string());
+        if self.verdict.starts_with("mixed") {
+            return match self.observed_lane {
+                Some(lane) => format!("mixed→{lane}"),
+                None => "mixed".to_string(),
+            };
+        }
+        match self.observed_lane {
+            Some(lane) => format!("{lane}-observed"),
+            None => "indeterminate".to_string(),
         }
     }
 
-    let mut matched: Vec<String> = Vec::new();
-    matched.extend(metal.iter().cloned());
-    matched.extend(cuda.iter().cloned());
-    matched.extend(cpu.iter().cloned());
-    matched.truncate(40);
-
-    let verdict = match (!metal.is_empty(), !cuda.is_empty(), !cpu.is_empty()) {
-        (true, false, false) => "metal-observed",
-        (false, true, false) => "cuda-observed",
-        (false, false, true) => "cpu-observed",
-        (false, false, false) => {
-            "indeterminate — no prover-selection lines captured; rerun with RUST_LOG=debug"
+    /// Process exit code for this report given an optional `--expect`ed lane.
+    /// A timed-out run is indeterminate, never a mismatch.
+    pub fn exit(&self, expected: Option<Lane>) -> ExitCode {
+        if self.timed_out {
+            return ExitCode::from(lane::EXIT_INDETERMINATE);
         }
-        _ => "mixed — multiple lanes mentioned; read matched_lines and judge",
-    };
-    (verdict.to_string(), matched)
+        let verdict = match self.observed_lane {
+            Some(lane) => lane::Verdict::Observed { lane },
+            None => lane::Verdict::Indeterminate,
+        };
+        lane::exit_code(&verdict, expected)
+    }
 }
 
-pub fn observe(project: &str, extra_args: Option<&str>) -> Result<ProveReport> {
+/// Read a child stream line by line, echoing each line live to our stderr (so
+/// the user sees progress) and collecting it for the scan. Reads raw bytes and
+/// decodes lossily per line, so a single non-UTF-8 chunk (a progress spinner, a
+/// stray byte) can never terminate capture and drop later lane lines.
+fn drain<R: Read + Send + 'static>(stream: R) -> Vec<String> {
+    let mut reader = BufReader::new(stream);
+    let mut lines = Vec::new();
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        match reader.read_until(b'\n', &mut buf) {
+            Ok(0) => break, // EOF
+            Ok(_) => {
+                while matches!(buf.last(), Some(b'\n' | b'\r')) {
+                    buf.pop();
+                }
+                let line = String::from_utf8_lossy(&buf).into_owned();
+                eprintln!("{line}");
+                lines.push(line);
+            }
+            Err(_) => break,
+        }
+    }
+    lines
+}
+
+pub fn observe(project: &str, extra_args: Option<&str>, opts: &ProveOpts) -> Result<ProveReport> {
     let dir = Path::new(project);
     if !dir.join("Cargo.toml").exists() {
         bail!(
@@ -70,8 +131,12 @@ pub fn observe(project: &str, extra_args: Option<&str>) -> Result<ProveReport> {
         );
     }
 
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    // Force real proving: a dev-mode run proves nothing about lanes.
+    // Capture the observed toolchain versions so the report self-dates against
+    // the version matrix (the "unreachable" finding is version-bound).
+    let env = crate::envprobe::probe();
+
+    // Force real proving: a dev-mode run produces fake receipts and proves
+    // nothing about lanes.
     let dev_mode = "0".to_string();
 
     let mut cmd = Command::new("cargo");
@@ -81,34 +146,96 @@ pub fn observe(project: &str, extra_args: Option<&str>) -> Result<ProveReport> {
         cmd.args(extra.split_whitespace());
     }
     cmd.current_dir(dir)
-        .env("RUST_LOG", &rust_log)
-        .env("RISC0_DEV_MODE", &dev_mode);
+        .env("RUST_LOG", &opts.rust_log)
+        .env("RISC0_DEV_MODE", &dev_mode)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     let shown = format!(
         "cargo run --release{}",
         extra_args.map(|a| format!(" -- {a}")).unwrap_or_default()
     );
+
     let started = Instant::now();
-    let out = cmd
-        .output()
+    let mut child = cmd
+        .spawn()
         .with_context(|| format!("failed to spawn `{shown}` in {}", dir.display()))?;
+
+    // Two reader threads (one per pipe) avoid the classic deadlock where a full
+    // stderr pipe blocks the child while we drain only stdout.
+    let stdout = child.stdout.take().expect("piped stdout");
+    let stderr = child.stderr.take().expect("piped stderr");
+    let t_out = thread::spawn(move || drain(stdout));
+    let t_err = thread::spawn(move || drain(stderr));
+
+    let timeout = Duration::from_secs(opts.timeout_secs);
+    let (status_code, timed_out) = match child.wait_timeout(timeout)? {
+        Some(status) => (status.code(), false),
+        None => {
+            // Budget exhausted — kill and reap so the reader threads see EOF.
+            let _ = child.kill();
+            let _ = child.wait();
+            (None, true)
+        }
+    };
     let wall = started.elapsed().as_secs_f64();
 
-    let combined = format!(
-        "{}\n{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let (verdict, matched_lines) = scan_lanes(&combined);
+    let mut lines = t_out.join().unwrap_or_default();
+    lines.extend(t_err.join().unwrap_or_default());
+    let combined = lines.join("\n");
+
+    let (lane_counts, mut matched_lines) = lane::scan(&combined);
+
+    let raw_verdict = lane_counts.verdict();
+    let succeeded = status_code == Some(0);
+    let (verdict, observed_lane) = if timed_out {
+        (
+            format!(
+                "indeterminate — timed out after {}s before the run completed; see lane_counts/matched_lines",
+                opts.timeout_secs
+            ),
+            None,
+        )
+    } else if !succeeded {
+        // A failed run (e.g. a build error) did not prove anything; any lane
+        // lines it emitted are unreliable, so we make no lane claim.
+        let how = status_code
+            .map(|c| format!("with code {c}"))
+            .unwrap_or_else(|| "via a signal".to_string());
+        (
+            format!(
+                "indeterminate — the proof run exited {how} (no successful proof observed); no lane is claimed"
+            ),
+            None,
+        )
+    } else {
+        (raw_verdict.label(), raw_verdict.effective_lane())
+    };
+
+    let mut project_str = dir.display().to_string();
+    if opts.redact {
+        project_str = redact(&project_str);
+        for line in &mut matched_lines {
+            *line = redact(line);
+        }
+    }
 
     Ok(ProveReport {
-        project: dir.display().to_string(),
+        target: "risc0",
+        project: project_str,
         command: shown,
-        rust_log,
+        rust_log: opts.rust_log.clone(),
         risc0_dev_mode: dev_mode,
-        exit_code: out.status.code(),
+        risc0_matrix: crate::versions::classify(env.r0vm.as_deref()),
+        r0vm_version: env.r0vm,
+        cargo_risczero_version: env.cargo_risczero,
+        exit_code: status_code,
+        timed_out,
+        timeout_secs: opts.timeout_secs,
         wall_seconds: wall,
         verdict,
+        observed_lane,
+        lane_counts,
         matched_lines,
         note: "verdict derives only from the matched_lines above; if it says indeterminate, no claim is made"
             .to_string(),
@@ -120,35 +247,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn metal_line_yields_metal_verdict() {
-        let (v, m) = scan_lanes("INFO risc0: using metal prover for segment\n");
-        assert_eq!(v, "metal-observed");
-        assert_eq!(m.len(), 1);
-    }
-
-    #[test]
-    fn cpu_line_yields_cpu_verdict() {
-        let (v, _) = scan_lanes("DEBUG prove: falling back to cpu hal\n");
-        assert_eq!(v, "cpu-observed");
-    }
-
-    #[test]
-    fn lane_word_without_context_is_ignored() {
-        let (v, m) = scan_lanes("Compiling metal v0.32.0\nFinished release target\n");
-        assert!(v.starts_with("indeterminate"));
-        assert!(m.is_empty());
-    }
-
-    #[test]
-    fn mixed_lanes_are_reported_as_mixed() {
-        let (v, m) = scan_lanes("INFO prover: metal enabled\nWARN prover: cpu fallback engaged\n");
-        assert!(v.starts_with("mixed"));
-        assert_eq!(m.len(), 2);
-    }
-
-    #[test]
     fn missing_project_errors_cleanly() {
-        let e = observe("/definitely/not/a/project", None).unwrap_err();
+        let e = observe("/definitely/not/a/project", None, &ProveOpts::default()).unwrap_err();
         assert!(e.to_string().contains("no Cargo.toml"));
     }
 }

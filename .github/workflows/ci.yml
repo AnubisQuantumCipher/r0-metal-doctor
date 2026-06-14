@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Primary gate on Apple Silicon so the macOS/Metal cfg path is actually built
+  # and the device/env/doctor probes run on real hardware.
+  macos:
+    runs-on: macos-14 # Apple Silicon (arm64)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: format
+        run: cargo fmt --all -- --check
+      - name: clippy (warnings are errors)
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: test
+        run: cargo test --locked
+      - name: build (release)
+        run: cargo build --locked --release
+      - name: smoke — probes must run and emit JSON
+        run: |
+          ./target/release/r0-metal-doctor device --json
+          ./target/release/r0-metal-doctor env --json
+          ./target/release/r0-metal-doctor doctor --json
+          ./target/release/r0-metal-doctor targets --json
+          ./target/release/r0-metal-doctor midnight --json
+          ./target/release/r0-metal-doctor check
+
+  # Prove the non-macOS cfg stub (device::probe fallback) compiles cleanly.
+  linux-stub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --locked
+
+  # Supply-chain gate: RustSec advisories, license allow-list, source pinning.
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check

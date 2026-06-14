@@ -1,2 +1,2 @@
-[2m2026-06-11T17:08:07.837730Z[0m [32m INFO[0m [2mrisc0_zkvm::host::server::exec::executor[0m[2m:[0m execution time: 1.285958ms
+2026-06-11T17:08:07.837730Z  INFO risc0_zkvm::host::server::exec::executor: execution time: 1.285958ms
 RECEIPT VERIFIED -- Metal hybrid prover produced a valid proof.

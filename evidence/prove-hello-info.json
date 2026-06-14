@@ -5,7 +5,7 @@
   "risc0_dev_mode": "0",
   "exit_code": 0,
   "wall_seconds": 70.217658667,
-  "verdict": "indeterminate — no prover-selection lines captured; rerun with RUST_LOG=debug",
+  "verdict": "indeterminate \u2014 no prover-selection lines captured; rerun with RUST_LOG=debug",
   "matched_lines": [],
   "note": "verdict derives only from the matched_lines above; if it says indeterminate, no claim is made"
 }

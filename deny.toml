@@ -1,0 +1,37 @@
+# cargo-deny configuration — supply-chain gate for r0-metal-doctor.
+# Run locally and in CI with: `cargo deny check`
+#
+# Grounded against the actual dependency tree (cargo-deny 0.19.x): the only
+# advisory is RUSTSEC-2024-0436 (paste, unmaintained) and the only licenses
+# present are MIT / Apache-2.0 / Unicode-3.0.
+
+[advisories]
+# RustSec advisory database checks (security + unmaintained).
+ignore = [
+    # `paste` is unmaintained (archived by its author) but is pulled in only
+    # transitively, via the `metal` crate's `objc`/`foreign-types` chain. There
+    # is no drop-in safe upgrade in that chain today, so this is accepted and
+    # tracked rather than blocking every build. Re-evaluate on a `metal` →
+    # `objc2`/`metal` modern-stack migration.
+    { id = "RUSTSEC-2024-0436", reason = "paste is an unmaintained transitive dep of the `metal` crate; no safe upgrade available in the metal/objc chain yet." },
+]
+
+[licenses]
+# Every license in the tree, explicitly allowed (no surprises slip in).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Surface (but don't fail on) duplicate versions; deny is too strict for a leaf
+# tool whose transitive deps occasionally diverge.
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+# Only crates.io is expected; reject crates from unknown registries or git.
+unknown-registry = "deny"
+unknown-git = "deny"

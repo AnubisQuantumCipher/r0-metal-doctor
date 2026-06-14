@@ -20,9 +20,121 @@ pub struct EnvReport {
     pub risc0_prover: Option<String>,
     pub rust_log: Option<String>,
     pub observations: Vec<String>,
+    /// Typed misconfiguration checks with remediation advice.
+    pub checks: Vec<EnvCheck>,
 }
 
-fn version_of(bin: &str, args: &[&str]) -> Option<String> {
+impl EnvReport {
+    /// A copy with host-identifying details redacted from the free-form value
+    /// fields. `RISC0_PROVER` and `RUST_LOG` are arbitrary user strings that
+    /// commonly hold paths/usernames; version strings and observations are
+    /// redacted too. Used for shareable artifacts (the evidence `bundle`).
+    pub fn redacted(&self) -> EnvReport {
+        let r = |o: &Option<String>| o.as_deref().map(crate::sanitize::redact);
+        EnvReport {
+            os: self.os.clone(),
+            arch: self.arch.clone(),
+            rustc: r(&self.rustc),
+            cargo: r(&self.cargo),
+            rzup: r(&self.rzup),
+            cargo_risczero: r(&self.cargo_risczero),
+            r0vm: r(&self.r0vm),
+            risc0_dev_mode: r(&self.risc0_dev_mode),
+            risc0_prover: r(&self.risc0_prover),
+            rust_log: r(&self.rust_log),
+            observations: self
+                .observations
+                .iter()
+                .map(|o| crate::sanitize::redact(o))
+                .collect(),
+            checks: self
+                .checks
+                .iter()
+                .map(|c| EnvCheck {
+                    level: c.level,
+                    message: crate::sanitize::redact(&c.message),
+                    remediation: c.remediation.as_deref().map(crate::sanitize::redact),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// A single environment check: a severity, what was found, and how to fix it.
+#[derive(Serialize, Debug, Clone)]
+pub struct EnvCheck {
+    /// `ok` · `info` · `warn`
+    pub level: &'static str,
+    pub message: String,
+    pub remediation: Option<String>,
+}
+
+impl EnvCheck {
+    fn warn(message: impl Into<String>, remediation: impl Into<String>) -> Self {
+        EnvCheck {
+            level: "warn",
+            message: message.into(),
+            remediation: Some(remediation.into()),
+        }
+    }
+    fn info(message: impl Into<String>, remediation: impl Into<String>) -> Self {
+        EnvCheck {
+            level: "info",
+            message: message.into(),
+            remediation: Some(remediation.into()),
+        }
+    }
+    fn ok(message: impl Into<String>) -> Self {
+        EnvCheck {
+            level: "ok",
+            message: message.into(),
+            remediation: None,
+        }
+    }
+}
+
+fn build_checks(
+    rzup: &Option<String>,
+    cargo_risczero: &Option<String>,
+    r0vm: &Option<String>,
+    dev_mode: &Option<String>,
+    prover: &Option<String>,
+) -> Vec<EnvCheck> {
+    let mut checks = Vec::new();
+
+    if let Some(v) = dev_mode {
+        if matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on") {
+            checks.push(EnvCheck::warn(
+                "RISC0_DEV_MODE is enabled — receipts are FAKE and no real proving runs",
+                "unset RISC0_DEV_MODE before any lane question is meaningful",
+            ));
+        }
+    }
+    if let Some(p) = prover {
+        checks.push(EnvCheck::info(
+            format!("RISC0_PROVER is set ({p}) — it overrides default prover selection"),
+            "unset RISC0_PROVER to observe the default selection path",
+        ));
+    }
+    let toolchain_present = cargo_risczero.is_some() || r0vm.is_some();
+    if !toolchain_present {
+        checks.push(EnvCheck::warn(
+            "risc0 toolchain not found (no cargo-risczero or r0vm on PATH)",
+            "install via rzup: https://dev.risczero.com/api/zkvm/install",
+        ));
+    } else if rzup.is_some() && r0vm.is_none() {
+        checks.push(EnvCheck::warn(
+            "rzup is installed but r0vm is not on PATH — possible toolchain skew",
+            "run `rzup install` and ensure ~/.risc0/bin is on PATH",
+        ));
+    }
+    if checks.iter().all(|c| c.level != "warn") {
+        checks.insert(0, EnvCheck::ok("no blocking misconfiguration detected"));
+    }
+    checks
+}
+
+pub(crate) fn version_of(bin: &str, args: &[&str]) -> Option<String> {
     let out = Command::new(bin).args(args).output().ok()?;
     if !out.status.success() {
         return None;
@@ -73,6 +185,14 @@ pub fn probe() -> EnvReport {
         );
     }
 
+    let checks = build_checks(
+        &rzup,
+        &cargo_risczero,
+        &r0vm,
+        &risc0_dev_mode,
+        &risc0_prover,
+    );
+
     EnvReport {
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
@@ -85,6 +205,7 @@ pub fn probe() -> EnvReport {
         risc0_prover,
         rust_log,
         observations,
+        checks,
     }
 }
 
@@ -110,5 +231,30 @@ mod tests {
         let j = serde_json::to_string(&r).expect("serialize");
         assert!(j.contains("\"os\""));
         assert!(j.contains("\"observations\""));
+    }
+
+    #[test]
+    fn redacted_scrubs_home_from_value_fields() {
+        // RISC0_PROVER / RUST_LOG are arbitrary user strings that can hold home
+        // paths; the redacted copy (used by `bundle`) must scrub them.
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/home/tester".into());
+        let mut r = probe();
+        r.risc0_prover = Some(format!("{home}/secret/prover"));
+        r.rust_log = Some(format!("debug,{home}/trace"));
+        // the home path also reaches the derived observations and checks
+        r.observations.push(format!(
+            "RISC0_PROVER={home}/secret/prover overrides selection"
+        ));
+        r.checks.push(EnvCheck::info(
+            format!("RISC0_PROVER is set ({home}/secret)"),
+            "unset RISC0_PROVER",
+        ));
+        let red = r.redacted();
+        let j = serde_json::to_string(&red).expect("serialize");
+        assert!(
+            !j.contains(&home),
+            "redacted env.json still contains $HOME: {j}"
+        );
+        assert!(red.risc0_prover.as_deref().unwrap().starts_with('~'));
     }
 }
