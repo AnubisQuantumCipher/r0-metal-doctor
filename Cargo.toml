@@ -23,7 +23,7 @@ strip-ansi-escapes = "0.2"
 wait-timeout = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-metal = "0.32"
+metal = "0.33"
 
 # The profile that 'dist' will build with
 [profile.dist]
